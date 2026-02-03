@@ -1,29 +1,56 @@
-from datetime import datetime
+import os
+import requests
+from tqdm import tqdm
 
-def listar_ultimos_trimestres():
-    """
-    A ANS não permite listagem automática de arquivos ou diretórios.
-    Portanto, os trimestres são definidos com base no calendário.
-    """
+BASE_URL = "https://dadosabertos.ans.gov.br/FTP/PDA/demonstracoes_contabeis/"
+PASTA_DESTINO = "data/raw"
 
-    hoje = datetime.today()
-    ano = hoje.year
-    mes = hoje.month
+TRIMESTRES = [
+    (2024, "4T"),
+    (2024, "3T"),
+    (2024, "2T"),
+]
 
-    if mes <= 3:
-        trimestres = [(ano - 1, "4T"), (ano - 1, "3T"), (ano - 1, "2T")]
-    elif mes <= 6:
-        trimestre = [(ano, "1T"), (ano - 1, "4T"), (ano - 1, "3T")]
-    elif mes <= 9:
-        trimestre = [(ano, "2T"), (ano, "1T"), (ano - 1, "4T")]
-    else:
-        trimestres = [(ano, "3T"), (ano, "2T"), (ano, "1T")]
+def baixar_arquivo(url, caminho_destino):
+    try:
+        with requests.get(url, stream=True, timeout=30) as r:
+            if r.status_code != 200:
+                print(f"Falha ao baixar: {url}")
+                return False
 
-    return trimestres
+            total = int(r.headers.get("content-length", 0))
+            with open(caminho_destino, "wb") as f, tqdm(
+                total=total,
+                unit="B",
+                unit_scale=True,
+                desc=os.path.basename(caminho_destino)
+            ) as barra:
+                for chunk in r.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+                        barra.update(len(chunk))
+        return True
+    except requests.RequestException as e:
+        print(f"Erro de conexão: {e}")
+        return False
+
+def main():
+    os.makedirs(PASTA_DESTINO, exist_ok=True)
+
+    print("Iniciando download dos arquivos...\n")
+
+    for ano, trimestre in TRIMESTRES:
+        nome_arquivo = f"{trimestre}{ano}.zip"
+        url = f"{BASE_URL}{ano}/{nome_arquivo}"
+        caminho = os.path.join(PASTA_DESTINO, nome_arquivo)
+
+        print(f"\nBaixando {nome_arquivo}")
+        sucesso = baixar_arquivo(url, caminho)
+
+        if sucesso:
+            print(f"Download concluído: {nome_arquivo}\n")
+        else: 
+            print(f"Arquivo indisponível: {nome_arquivo}\n")
 
 if __name__ == "__main__":
-    print("Trimestres considerados para processamento:\n")
-
-    trimestres = listar_ultimos_trimestres()
-    for ano, trimestre in trimestres:
-        print(f"Ano: {ano} - Trimestre: {trimestre}")
+    main()
